@@ -1,10 +1,10 @@
 [package]
-name = "MessageBoard"
+name = "WattSwap"
 version = "1.0.0"
 authors = []
 
 [addresses]
-message_board_addr = "_"
+wattswap_addr = "0x38b48a245aa2eaa9a03c89bdb667ef9d07179d04b194e36c617523be8c391860"
 
 [dependencies]
 AptosFramework = { git = "https://github.com/aptos-labs/aptos-core.git", rev = "mainnet", subdir = "aptos-move/framework/aptos-framework" }
