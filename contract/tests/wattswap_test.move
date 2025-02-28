@@ -1,154 +1,288 @@
-#[test_only]
 module wattswap_addr::wattswap_test {
-    use std::string;
-    use aptos_framework::account;
-    use aptos_framework::coin;
-    use aptos_std::smart_table;
-    use aptos_framework::signer;
-
+    use std::signer;
+    use aptos_framework::aptos_coin::{Self, AptosCoin};
     use wattswap_addr::wattswap;
 
     #[test_only]
-    const ADMIN_ADDRESS: address = @0xcafe;
+    use aptos_framework::account;
     #[test_only]
-    const BUYER_ADDRESS: address = @0xbeef;
+    use aptos_framework::coin;
     #[test_only]
-    const SELLER_ADDRESS: address = @0xface;
+    use std::vector;
 
-    #[test(sender = @0xcafe)]
-    fun test_init(sender: &signer) {
-        wattswap::init(sender);
-
-        // Verify that the UserRoles resource is created
-        assert!(exists<wattswap::UserRoles>(@wattswap_addr), 0);
-
-        // Verify that the admin role is assigned to the creator
-        assert!(wattswap::has_role(signer::address_of(sender), 2), 1);
+    #[test(account = @0x1)]
+    fun test_initialize_swaps(account: signer) {
+        wattswap::initialize_swaps(&account);
     }
 
-    #[test(sender = @0xcafe)]
-    fun test_assign_role(sender: &signer) acquires wattswap::UserRoles {
-        wattswap::init(sender);
-
-        // Assign buyer role to buyer address
-        wattswap::assign_role(BUYER_ADDRESS, 0);
-        assert!(wattswap::has_role(BUYER_ADDRESS, 0), 0);
-
-        // Assign seller role to seller address
-        wattswap::assign_role(SELLER_ADDRESS, 1);
-        assert!(wattswap::has_role(SELLER_ADDRESS, 1), 1);
+   #[test(account = @0x1)]
+    #[expected_failure(abort_code = 0, location = wattswap)]
+    fun test_double_initialize(account: signer) {
+        wattswap::initialize_swaps(&account);
+        wattswap::initialize_swaps(&account);
     }
 
-    #[test(sender = @0xcafe)]
-    fun test_deposit(sender: &signer) acquires wattswap::UserRoles {
-        // Create accounts
-        account::create_account(ADMIN_ADDRESS);
-        account::create_account(BUYER_ADDRESS);
-        account::create_account(SELLER_ADDRESS);
 
-        // Initialize the contract
-        wattswap::init(sender);
+    #[test(seller = @0x1)]
+    fun test_create_swap(seller: signer) {
+        let watt_amount = 100;
+        let apt_price = 50;
 
-        // Assign buyer role
-        wattswap::assign_role(BUYER_ADDRESS, 0);
+        wattswap::initialize_swaps(&seller);
+        wattswap::create_swap(&seller, watt_amount, apt_price);
 
-        // Register coin for buyer
-        coin::register<aptos_framework::aptos_coin::AptosCoin>(sender);
+        let swaps = wattswap::get_swaps(@0x1);
+        assert!(vector::length(&swaps) == 1, 0);
+        let (id, seller_addr, buyer_addr, watt_amount_check, apt_price_check, is_active) = wattswap::get_swap_details(@0x1, 1);
 
-        // Mint coins for buyer
-        coin::mint<aptos_framework::aptos_coin::AptosCoin>(sender, BUYER_ADDRESS, 1000);
+        assert!(id == 1, 1); //id
+        assert!(seller_addr == @0x1, 2); //seller
+        assert!(buyer_addr == @0x0, 3); //buyer
+        assert!(watt_amount_check == watt_amount, 4); //watt_amount
+        assert!(apt_price_check == apt_price, 5); //apt_price
+        assert!(is_active == true, 6); //is_active
 
-        let initial_balance = coin::balance<aptos_framework::aptos_coin::AptosCoin>(BUYER_ADDRESS);
-
-        // Deposit coins
-        let deposit_amount: u64 = 500;
-        wattswap::deposit(&(account::create_signer(BUYER_ADDRESS)), deposit_amount);
-
-        let final_balance = coin::balance<aptos_framework::aptos_coin::AptosCoin>(BUYER_ADDRESS);
-
-        // Verify that the buyer's balance has decreased
-        assert!(final_balance == initial_balance - deposit_amount, 0);
-
-        // Verify that the contract's balance has increased
-        let contract_balance = coin::balance<aptos_framework::aptos_coin::AptosCoin>(@wattswap_addr);
-        assert!(contract_balance == deposit_amount, 1);
     }
 
-    // #[test(sender = @0xcafe)]
-    // fun test_confirm(sender: &signer) acquires wattswap::UserRoles {
-    //     // Create accounts
-    //     account::create_account(ADMIN_ADDRESS);
-    //     account::create_account(BUYER_ADDRESS);
-    //     account::create_account(SELLER_ADDRESS);
+    #[test(seller = @0x1)]
+    fun test_create_swap_zero_values(seller: signer) {
+        wattswap::initialize_swaps(&seller);
+        wattswap::create_swap(&seller, 0, 0);
 
-    //     // Initialize the contract
-    //     wattswap::init(sender);
+        let swaps = wattswap::get_swaps(@0x1);
+        assert!(vector::length(&swaps) == 1, 0);
 
-    //     // Assign roles
-    //     wattswap::assign_role(BUYER_ADDRESS, 0);
-    //     wattswap::assign_role(SELLER_ADDRESS, 1);
+        let (id, seller_addr, buyer_addr, watt_amount_check, apt_price_check, is_active) = wattswap::get_swap_details(@0x1, 1);
+        assert!(watt_amount_check == 0, 1);
+        assert!(apt_price_check == 0, 2);
+    }
 
-    //     // Register coin for buyer and seller
-    //     coin::register<aptos_framework::aptos_coin::AptosCoin>(sender);
+    #[test(seller = @0x1)]
+    fun test_create_multiple_swaps(seller: signer) {
+        wattswap::initialize_swaps(&seller);
+        wattswap::create_swap(&seller, 100, 50);
+        wattswap::create_swap(&seller, 200, 100);
 
-    //     // Mint coins for buyer
-    //     coin::mint<aptos_framework::aptos_coin::AptosCoin>(sender, BUYER_ADDRESS, 1000);
+        let swaps = wattswap::get_swaps(@0x1);
+        assert!(vector::length(&swaps) == 2, 0);
 
-    //     // Deposit coins
-    //     let deposit_amount: u64 = 500;
-    //     wattswap::deposit(&(account::create_signer(BUYER_ADDRESS)), deposit_amount);
+        let (id1, _, _, _, _, _) = wattswap::get_swap_details(@0x1, 1);
+        let (id2, _, _, _, _, _) = wattswap::get_swap_details(@0x1, 2);
+        assert!(id1 == 1, 1); // Check id is 1
+        assert!(id2 == 2, 2); // Check id is 2
+    }
 
-    //     let initial_buyer_balance = coin::balance<aptos_framework::aptos_coin::AptosCoin>(BUYER_ADDRESS);
-    //     let initial_seller_balance = coin::balance<aptos_framework::aptos_coin::AptosCoin>(SELLER_ADDRESS);
+        #[test(seller = @0x1, buyer = @0x2)]
+    fun test_successful_purchase(seller: signer, buyer: signer) {
+        let watt_amount = 100;
+        let apt_price = 50;
 
-    //     // Confirm energy transfer
-    //     wattswap::confirm(&(account::create_signer(SELLER_ADDRESS)), BUYER_ADDRESS, deposit_amount);
+        // Initialize and create swap
+        wattswap::initialize_swaps(&seller);
+        wattswap::create_swap(&seller, watt_amount, apt_price);
 
-    //     let final_buyer_balance = coin::balance<aptos_framework::aptos_coin::AptosCoin>(BUYER_ADDRESS);
-    //     let final_seller_balance = coin::balance<aptos_framework::aptos_coin::AptosCoin>(SELLER_ADDRESS);
+        // Fund the buyer
+        coin::register<AptosCoin>(&buyer);
+        account::create_account_for_test(@0x2);
+        coin::transfer<AptosCoin>(&aptos_framework::genesis_signer(), @0x2, apt_price);
 
-    //     // Verify that the buyer's balance has decreased
-    //     assert!(final_buyer_balance == initial_buyer_balance - deposit_amount, 0);
+        // Purchase the swap
+        wattswap::purchase(&buyer, @0x1, 1);
 
-    //     // Verify that the seller's balance has increased
-    //     assert!(final_seller_balance == initial_seller_balance + deposit_amount, 1);
-    // }
+        // Check swap details
+        let (id, seller_addr, buyer_addr, watt_amount_check, apt_price_check, is_active) = wattswap::get_swap_details(@0x1, 1);
 
-    // #[test(sender = @0xcafe)]
-    // fun test_refund(sender: &signer) acquires wattswap::UserRoles {
-    //     // Create accounts
-    //     account::create_account(ADMIN_ADDRESS);
-    //     account::create_account(BUYER_ADDRESS);
-    //     account::create_account(SELLER_ADDRESS);
+        assert!(buyer_addr == @0x2, 0);
+        assert!(is_active == false, 1);
 
-    //     // Initialize the contract
-    //     wattswap::init(sender);
+        // Check balances (would need a mock coin module for precise checks)
 
-    //     // Assign buyer role
-    //     wattswap::assign_role(BUYER_ADDRESS, 0);
+    }
 
-    //     // Register coin for buyer
-    //     coin::register<aptos_framework::aptos_coin::AptosCoin>(sender);
+    #[test(seller = @0x1, buyer = @0x2)]
+    #[expected_failure(abort_code = wattswap::E_SWAP_NOT_FOUND, location = wattswap)]
+    fun test_purchase_swap_not_found(seller: signer, buyer: signer) {
+        wattswap::initialize_swaps(&seller);
+        coin::register<AptosCoin>(&buyer);
+        account::create_account_for_test(@0x2);
+        coin::transfer<AptosCoin>(&aptos_framework::genesis_signer(), @0x2, 100);
+        wattswap::purchase(&buyer, @0x1, 1); // Swap ID 1 doesn't exist
+    }
 
-    //     // Mint coins for buyer
-    //     coin::mint<aptos_framework::aptos_coin::AptosCoin>(sender, BUYER_ADDRESS, 1000);
+    #[test(seller = @0x1, buyer = @0x2)]
+    #[expected_failure(abort_code = wattswap::E_SWAP_NOT_ACTIVE, location = wattswap)]
+    fun test_purchase_swap_not_active(seller: signer, buyer: signer) {
+        wattswap::initialize_swaps(&seller);
+        wattswap::create_swap(&seller, 100, 50);
 
-    //     // Deposit coins
-    //     let deposit_amount: u64 = 500;
-    //     wattswap::deposit(&(account::create_signer(BUYER_ADDRESS)), deposit_amount);
+        coin::register<AptosCoin>(&buyer);
+        account::create_account_for_test(@0x2);
+        coin::transfer<AptosCoin>(&aptos_framework::genesis_signer(), @0x2, 100);
 
-    //     let initial_buyer_balance = coin::balance<aptos_framework::aptos_coin::AptosCoin>(BUYER_ADDRESS);
+        wattswap::purchase(&buyer, @0x1, 1);
+        wattswap::purchase(&buyer, @0x1, 1); // Purchase again
+    }
 
-    //     // Refund
-    //     wattswap::refund(&(account::create_signer(BUYER_ADDRESS)), deposit_amount);
+   #[test(seller = @0x1, buyer1 = @0x2, buyer2 = @0x3)]
+    #[expected_failure(abort_code = wattswap::E_SWAP_NOT_ACTIVE, location = wattswap)]
+    fun test_purchase_already_purchased(seller: signer, buyer1: signer, buyer2: signer)  {
+        wattswap::initialize_swaps(&seller);
+        wattswap::create_swap(&seller, 100, 50);
 
-    //     let final_buyer_balance = coin::balance<aptos_framework::aptos_coin::AptosCoin>(BUYER_ADDRESS);
+        coin::register<AptosCoin>(&buyer1);
+        coin::register<AptosCoin>(&buyer2);
+        account::create_account_for_test(@0x2);
+        account::create_account_for_test(@0x3);
+        coin::transfer<AptosCoin>(&aptos_framework::genesis_signer(), @0x2, 100);
+        coin::transfer<AptosCoin>(&aptos_framework::genesis_signer(), @0x3, 100);
 
-    //     // Verify that the buyer's balance has increased
-    //     assert!(final_buyer_balance == initial_buyer_balance + deposit_amount, 0);
+        wattswap::purchase(&buyer1, @0x1, 1);
+        wattswap::purchase(&buyer2, @0x1, 1); // Different buyer tries to purchase
+    }
 
-    //     // Verify that the contract's balance has decreased
-    //     let contract_balance = coin::balance<aptos_framework::aptos_coin::AptosCoin>(@wattswap_addr);
-    //     assert!(contract_balance == 0, 1);
-    // }
+    #[test(seller = @0x1, buyer = @0x2)]
+    #[expected_failure(abort_code = 0, location = aptos_framework)] // Assuming coin transfer failure aborts with 0. Need a better way to test this.
+    fun test_purchase_insufficient_balance(seller: signer, buyer: signer) {
+
+        wattswap::initialize_swaps(&seller);
+        wattswap::create_swap(&seller, 100, 50);
+
+        coin::register<AptosCoin>(&buyer);
+        account::create_account_for_test(@0x2);
+        // Don't fund the buyer
+        wattswap::purchase(&buyer, @0x1, 1);
+    }
+
+     #[test(seller = @0x1)]
+    #[expected_failure(abort_code = wattswap::E_NOT_BUYER, location = wattswap)]
+    fun test_purchase_own_swap(seller: signer)  {
+        wattswap::initialize_swaps(&seller);
+        wattswap::create_swap(&seller, 100, 50);
+
+        coin::register<AptosCoin>(&seller);
+        account::create_account_for_test(@0x1);
+        coin::transfer<AptosCoin>(&aptos_framework::genesis_signer(), @0x1, 50);
+
+        wattswap::purchase(&seller, @0x1, 1); // Seller tries to buy their own swap
+    }
+
+    #[test(seller = @0x1, buyer = @0x2)]
+    fun test_confirm(seller: signer, buyer: signer) {
+        wattswap::initialize_swaps(&seller);
+        wattswap::create_swap(&seller, 100, 50);
+
+        coin::register<AptosCoin>(&buyer);
+        account::create_account_for_test(@0x2);
+        coin::transfer<AptosCoin>(&aptos_framework::genesis_signer(), @0x2, 50);
+        wattswap::purchase(&buyer, @0x1, 1);
+
+        wattswap::confirm(&seller, 1);
+    }
+
+     #[test(seller = @0x1, buyer = @0x2)]
+    #[expected_failure(abort_code = wattswap::E_SWAP_NOT_FOUND, location = wattswap)]
+    fun test_confirm_swap_not_found(seller: signer, buyer: signer)  {
+        wattswap::initialize_swaps(&seller);
+        wattswap::confirm(&seller, 1); // Swap ID 1 doesn't exist
+    }
+
+    #[test(seller = @0x1, buyer = @0x2, other = @0x3)]
+    #[expected_failure(abort_code = wattswap::E_NOT_SELLER, location = wattswap)]
+    fun test_confirm_not_seller(seller: signer, buyer: signer, other: signer)  {
+        wattswap::initialize_swaps(&seller);
+        wattswap::create_swap(&seller, 100, 50);
+
+        coin::register<AptosCoin>(&buyer);
+        account::create_account_for_test(@0x2);
+        coin::transfer<AptosCoin>(&aptos_framework::genesis_signer(), @0x2, 50);
+        wattswap::purchase(&buyer, @0x1, 1);
+
+        wattswap::confirm(&other, 1); // 'other' is not the seller
+    }
+
+    #[test(seller = @0x1)]
+    fun test_get_swaps_no_swaps(seller: signer) {
+        wattswap::initialize_swaps(&seller);
+        let swaps = wattswap::get_swaps(@0x1);
+        assert!(vector::length(&swaps) == 0, 0);
+    }
+
+    #[test(seller = @0x1)]
+    fun test_get_swaps_one_swap(seller: signer)  {
+        wattswap::initialize_swaps(&seller);
+        wattswap::create_swap(&seller, 100, 50);
+        let swaps = wattswap::get_swaps(@0x1);
+        assert!(vector::length(&swaps) == 1, 0);
+    }
+
+    #[test(seller = @0x1)]
+    fun test_get_swaps_multiple_swaps(seller: signer)  {
+        wattswap::initialize_swaps(&seller);
+        wattswap::create_swap(&seller, 100, 50);
+        wattswap::create_swap(&seller, 200, 100);
+        let swaps = wattswap::get_swaps(@0x1);
+        assert!(vector::length(&swaps) == 2, 0);
+    }
+
+     #[test(seller = @0x1, buyer = @0x2)]
+    fun test_get_active_swaps_no_active(seller: signer, buyer: signer) {
+        wattswap::initialize_swaps(&seller);
+        wattswap::create_swap(&seller, 100, 50);
+
+        coin::register<AptosCoin>(&buyer);
+        account::create_account_for_test(@0x2);
+        coin::transfer<AptosCoin>(&aptos_framework::genesis_signer(), @0x2, 50);
+        wattswap::purchase(&buyer, @0x1, 1);
+
+        let active_swaps = wattswap::get_active_swaps(@0x1);
+        assert!(vector::length(&active_swaps) == 0, 0);
+    }
+
+    #[test(seller = @0x1)]
+    fun test_get_active_swaps_one_active(seller: signer)  {
+        wattswap::initialize_swaps(&seller);
+        wattswap::create_swap(&seller, 100, 50);
+        let active_swaps = wattswap::get_active_swaps(@0x1);
+        assert!(vector::length(&active_swaps) == 1, 0);
+    }
+
+    #[test(seller = @0x1, buyer = @0x2)]
+    fun test_get_active_swaps_mixed(seller: signer, buyer: signer)  {
+        wattswap::initialize_swaps(&seller);
+        wattswap::create_swap(&seller, 100, 50); // Active
+        wattswap::create_swap(&seller, 200, 100); // Will be inactive
+
+        coin::register<AptosCoin>(&buyer);
+        account::create_account_for_test(@0x2);
+        coin::transfer<AptosCoin>(&aptos_framework::genesis_signer(), @0x2, 100);
+        wattswap::purchase(&buyer, @0x1, 2);
+
+        let active_swaps = wattswap::get_active_swaps(@0x1);
+        assert!(vector::length(&active_swaps) == 1, 0);
+        let (id, _, _, _, _, _) = wattswap::get_swap_details(@0x1, vector::borrow(&active_swaps, 0).id);
+        assert!(id == 1, 1); //check id of active swap
+    }
+
+    #[test(seller = @0x1)]
+    fun test_get_swap_details_found(seller: signer)  {
+        wattswap::initialize_swaps(&seller);
+        wattswap::create_swap(&seller, 100, 50);
+        let (id, seller_addr, buyer_addr, watt_amount, apt_price, is_active) = wattswap::get_swap_details(@0x1, 1);
+
+        assert!(id == 1, 0);
+        assert!(seller_addr == @0x1, 1);
+        assert!(buyer_addr == @0x0, 2);
+        assert!(watt_amount == 100, 3);
+        assert!(apt_price == 50, 4);
+        assert!(is_active == true, 5);
+    }
+
+
+    #[test(seller = @0x1)]
+    #[expected_failure(abort_code = wattswap::E_SWAP_NOT_FOUND, location = wattswap)]
+    fun test_get_swap_details_not_found(seller: signer) {
+        wattswap::initialize_swaps(&seller);
+        wattswap::get_swap_details(@0x1, 1); // Swap ID 1 doesn't exist
+    }
+
 }
