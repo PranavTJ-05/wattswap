@@ -4,9 +4,13 @@ version = "1.0.0"
 authors = []
 
 [addresses]
-wattswap_addr = "0x38b48a245aa2eaa9a03c89bdb667ef9d07179d04b194e36c617523be8c391860"
+wattswap_addr = "_"
 
-[dependencies]
-AptosFramework = { git = "https://github.com/aptos-labs/aptos-core.git", rev = "mainnet", subdir = "aptos-move/framework/aptos-framework" }
+[dev-addresses]
+
+[dependencies.AptosFramework]
+git = "https://github.com/aptos-labs/aptos-core.git"
+rev = "mainnet"
+subdir = "aptos-move/framework/aptos-framework"
 
 [dev-dependencies]
